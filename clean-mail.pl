@@ -17,6 +17,7 @@ my $copy_only;
 my $no_writes;
 my $login;
 my $password;
+my $box;
 my $verbose = 0;
 my $force;
 
@@ -25,6 +26,7 @@ GetOptions("copy-only|copy|c!" => \$copy_only,
 	   "mailserver|server|s=s" => \$server,
 	   "username|user|login|u=s" => \$login,
 	   "password|p=s" => \$password,
+     "box|b=s" => \$box,
 	   "verbose|v!" => \$verbose,
 	   "quiet|q!" => sub { $verbose = 0; },
 	   "force|f!" => \$force,
@@ -41,6 +43,7 @@ Usage: $0 [options...]
   --mailserver=HOST, -s HOST  Hostname of mail server (default: 'mail')
   --username=USER, -u USER    Username on mail server
   --password=PASS, -p PASS    Password on mail server
+  --box, -b BOX               Mailbox Folder to clean (defaults to Inbox and Deleted Items)
   --verbose, -v               Lots of extra output
   --quiet, -q                 Minimal output (default)
   --force, -f                 Do not ask before moving and deleting mail
@@ -80,9 +83,13 @@ $sock->blocking(0);
 send_command($sock, "LOGIN \"$login\" \"$password\"");
 check_response($sock);
 
-# clean inbox and deleted items
-clean_box("inbox");
-clean_box("deleted items");
+if (! defined $box) {
+  # clean inbox and deleted items
+  clean_box("inbox");
+  clean_box("deleted items");
+} else {
+  clean_box($box);
+}
 
 ######################################################################
 
