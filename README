@@ -1,0 +1,10 @@
+Clean Mail
+=====================
+
+When using Thunderbird with an Exchange server there are occasions when you'll get an error message similar to the following:
+    The current operation on 'Folder' did not succeed. The mail server for account Your Account responded: The requested message could not be converted to an RFC-822 compatible format.
+
+This is a Perl script to clean out the offending message. It was originally written by Steve Fink. His original version is available in the initial commit, or from his site (http://foxglove.dnsalias.org/~sfink/clean-mail/index.html). His site also has a binary version for Windows users.
+
+There's also a similar tool in Ruby, but I don't do ruby...
+http://github.com/devender/clean-mail
