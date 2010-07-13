@@ -38,17 +38,12 @@ sub usage {
 
     print <<"END";
 Usage: $0 [options...]
-  --copy-only, -c             Only copy bad messages, do not delete anything
-  --no-writes, --dry-run, -n  Do not modify anything
   --mailserver=HOST, -s HOST  Hostname of mail server (default: 'mail')
   --username=USER, -u USER    Username on mail server
   --password=PASS, -p PASS    Password on mail server
   --verbose, -v               Lots of extra output
   --quiet, -q                 Minimal output (default)
   --force, -f                 Do not ask before moving and deleting mail
-  --trouble-mailbox-name=NAME, -T NAME
-                              Name of the mailbox to copy bad mail into.
-                              (default: inbox/Trouble)
   --help, -h                  Display this message
 
 Note that only unencrypted IMAP connections are currently supported.
@@ -85,49 +80,41 @@ $sock->blocking(0);
 send_command($sock, "LOGIN \"$login\" \"$password\"");
 check_response($sock);
 
-print "Scanning for bad messages...\n";
-
-# Select the inbox and get the message count
-send_command($sock, "SELECT inbox");
-my $data = check_response($sock);
-my ($num_messages) = $data =~ /\* (\d+) EXISTS/
-  or die "Cannot find number of messages\n";
-
-# Find the bad messages
-my @missing = find_bad($sock, 1, $num_messages);
-if (@missing == 0) {
-  print "All $num_messages look ok. No bad messages found.\n";
-  exit 0;
-}
-print "Bad message IDs: " . join(" ", map { "#$_" } @missing) . "\n";
-print "Found with $fetches fetches of $message_fetches messages\n"
-    if $verbose;
-
-unless ($no_writes) {
-  verify("Copy messages to $trouble folder?") unless $force;
-  send_command($sock, "COPY ".join(",", @missing)." $trouble");
-  my $response = get_response($sock);
-  if ($response !~ /^$TAG OK/m) {
-    if ($response =~ /^$TAG NO.*TRYCREATE/m) {
-      # TODO: Should really check hierarchy character.
-      verify("Create destination folder $trouble?");
-      send_command($sock, "CREATE $trouble");
-      check_response($sock);
-    }
-  }
-}
-
-unless ($copy_only) {
-  verify("Delete messages from inbox?") unless $force;
-  send_command($sock, "STORE ".join(",", @missing)." FLAGS \\Deleted");
-  check_response($sock);
-
-  verify("Compact inbox (expunge deleted messages)?");
-  send_command($sock, "EXPUNGE");
-  check_response($sock);
-}
+# clean inbox and deleted items
+clean_box("inbox");
+clean_box("deleted items");
 
 ######################################################################
+
+sub clean_box {
+  my ($thebox) = @_;
+  # Select the inbox and get the message count
+  send_command($sock, "SELECT \"".join(" ", $thebox).join(" ", "\""));
+
+  print "Scanning for bad messages in '$thebox'...\n";
+  
+  my $data = check_response($sock);
+  my ($num_messages) = $data =~ /\* (\d+) EXISTS/
+    or die "Cannot find number of messages\n";
+  
+  # Find the bad messages
+  my @missing = find_bad($sock, 1, $num_messages);
+  if (@missing == 0) {
+    print "All $num_messages look ok. No bad messages found.\n";
+  } else {
+    print "Bad message IDs: " . join(" ", map { "#$_" } @missing) . "\n";
+    print "Found with $fetches fetches of $message_fetches messages\n"
+      if $verbose;
+    
+    verify("Delete messages from inbox?") unless $force;
+    send_command($sock, "STORE ".join(",", @missing)." FLAGS \\Deleted");
+    check_response($sock);
+    
+    verify("Compact inbox (expunge deleted messages)?") unless $force;
+    send_command($sock, "EXPUNGE");
+    check_response($sock);
+  }
+}
 
 sub verify {
   my ($msg) = @_;
@@ -145,6 +132,35 @@ sub check_response {
       die "Command failed\n\nVerbose output:\n$data\n";
   }
   return $data;
+}
+
+sub send_command {
+  my ($socket, $command) = @_;
+  if ($verbose) {
+    print ("Command: $command\n") unless $command =~ m/LOGIN/;
+  }
+  $socket->syswrite("$TAG $command\r\n");
+}
+
+# I can't remember why I had to do nonblocking reads...
+sub get_response {
+  my ($socket) = @_;
+
+  my $data = '';
+  while (1) {
+    my $n = $socket->sysread($data, 4096, length($data));
+    if (! defined $n) {
+      if ($! =~ /would block|temporarily unavailable/) {
+	sleep(0.1);
+      } else {
+	die "Error reading socket: $!";
+      }
+    } elsif ($n == 0) {
+      return $data;
+    } else {
+      return $data if $data =~ /^$TAG .*\n/m;
+    }
+  }
 }
 
 # Funky routine to identify the list of bad messages, taking into
@@ -232,30 +248,4 @@ sub find_bad {
   chop($::INDENT);
   print $::INDENT . "RESULT: $orig -> @bad\n" if $verbose;
   return @bad;
-}
-
-sub send_command {
-  my ($socket, $command) = @_;
-  $socket->syswrite("$TAG $command\r\n");
-}
-
-# I can't remember why I had to do nonblocking reads...
-sub get_response {
-  my ($socket) = @_;
-
-  my $data = '';
-  while (1) {
-    my $n = $socket->sysread($data, 4096, length($data));
-    if (! defined $n) {
-      if ($! =~ /would block|temporarily unavailable/) {
-	sleep(0.1);
-      } else {
-	die "Error reading socket: $!";
-      }
-    } elsif ($n == 0) {
-      return $data;
-    } else {
-      return $data if $data =~ /^$TAG .*\n/m;
-    }
-  }
 }
