@@ -87,6 +87,7 @@ if (! defined $box) {
   # clean inbox and deleted items
   clean_box("inbox");
   clean_box("deleted items");
+  clean_box("trash");
 } else {
   clean_box($box);
 }
