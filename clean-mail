@@ -1,3 +1,3 @@
 #!/bin/sh
 
-~/bin/clean-mail.pl -s imap.yourserver.com -u your.username -f $@
+perl ./clean-mail.pl -s imap.yourserver.com -u your.username -f $@
